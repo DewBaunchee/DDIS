@@ -31,6 +31,6 @@ class DependencyProvider private constructor() {
     }
 
     private fun <T> classToName(aClass: Class<T>): String {
-        return aClass.packageName
+        return aClass.name
     }
 }

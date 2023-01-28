@@ -14,6 +14,7 @@ class MainView : View("") {
     override fun onDock() {
         super.onDock()
         primaryStage.isMaximized = true
+        primaryStage.titleProperty().unbind()
         selectedWindow.observe { primaryStage.title = it.name }
     }
 
