@@ -196,4 +196,14 @@ class ClientRepository : AbstractRepository<String, Client>(
             )
         }
     )
-)
+) {
+
+    fun getByPassport(series: String, number: String): Client? {
+        return getOneBy(
+            listOf(
+                entityMapping.getField("passport_series") to series,
+                entityMapping.getField("passport_number") to number,
+            )
+        )
+    }
+}

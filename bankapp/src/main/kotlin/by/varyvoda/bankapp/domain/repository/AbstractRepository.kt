@@ -10,7 +10,7 @@ import java.time.LocalDate
 import java.util.stream.Stream
 import kotlin.streams.toList
 
-abstract class AbstractRepository<Id, E>(private val entityMapping: EntityMapping<E>) : Repository<Id, E> {
+abstract class AbstractRepository<Id, E>(protected val entityMapping: EntityMapping<E>) : Repository<Id, E> {
 
     private val connection = DependencyProvider.get().provide(ConnectionProvider::class.java).getConnection()
 
@@ -108,7 +108,7 @@ abstract class AbstractRepository<Id, E>(private val entityMapping: EntityMappin
             query.setNull(position, accessors.jdbcType(field).vendorTypeNumber)
             return
         }
-        accessors.setter(field as EntityMapping.Field<E, T>)(query, position, value)
+        accessors.prepare(field as EntityMapping.Field<E, T>)(query, position, value)
     }
 
     private fun set(
@@ -133,13 +133,27 @@ abstract class AbstractRepository<Id, E>(private val entityMapping: EntityMappin
     }
 
     override fun get(id: Id): E? {
-        val query = connection.prepareStatement(selectTemplate)
-        setValue(query, id, 1, entityMapping.idField)
+        return getOneBy(listOf(entityMapping.idField to id!!))
+    }
+
+    protected fun getOneBy(values: List<Pair<EntityMapping.Field<E, out Any>, Any>>): E? {
+        return getListBy(values).getOrNull(0)
+    }
+
+    protected fun getListBy(values: List<Pair<EntityMapping.Field<E, out Any>, Any>>): List<E> {
+        val query = connection.prepareStatement(
+            "SELECT $allColumns FROM $tableName WHERE "
+                + values.joinToString(" AND ") { "${it.first.columnName} = ?" }
+        )
+        values.forEachIndexed { index, value ->
+            setValue(query, value.second, index + 1, value.first)
+        }
 
         val result = query.executeQuery()
-        if (!result.next()) return null
-
-        return parse(result)
+        return Stream.generate { }
+            .takeWhile { result.next() }
+            .map { parse(result) }
+            .toList()
     }
 
     override fun getAll(): List<E> {
@@ -182,16 +196,16 @@ abstract class AbstractRepository<Id, E>(private val entityMapping: EntityMappin
 
         fun <T : Any> add(
             aClass: Class<T>,
-            setter: (PreparedStatement, Int, T) -> Unit,
+            preparer: (PreparedStatement, Int, T) -> Unit,
             getter: (ResultSet, String) -> T?,
             jdbcType: JDBCType
         ): MapAccessors<E> {
-            map[aClass] = Accessors(setter, getter, jdbcType)
+            map[aClass] = Accessors(preparer, getter, jdbcType)
             return this
         }
 
-        fun <FT> setter(field: EntityMapping.Field<E, FT>): (PreparedStatement, Int, FT?) -> Unit {
-            return map[field.plainType]!!.setter as (PreparedStatement, Int, FT?) -> Unit
+        fun <FT> prepare(field: EntityMapping.Field<E, FT>): (PreparedStatement, Int, FT?) -> Unit {
+            return map[field.plainType]!!.preparer as (PreparedStatement, Int, FT?) -> Unit
         }
 
         fun <FT> getter(field: EntityMapping.Field<E, FT>): (ResultSet, String) -> FT? {
@@ -203,7 +217,7 @@ abstract class AbstractRepository<Id, E>(private val entityMapping: EntityMappin
         }
 
         class Accessors<T>(
-            val setter: (PreparedStatement, Int, T) -> Unit,
+            val preparer: (PreparedStatement, Int, T) -> Unit,
             val getter: (ResultSet, String) -> T?,
             val jdbcType: JDBCType
         )

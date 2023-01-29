@@ -30,9 +30,15 @@ class ClientTable : TableView<Client>() {
         column("Marital Status", Client::maritalStatus)
         column("Citizenship", Client::citizenship)
         column("Disability", Client::disability)
-        column("Pensioner", Client::pensioner)
-        column("Month income", Client::monthIncome)
-        column("Conscript", Client::conscript)
+        column("Pensioner", Client::pensioner).cellFormat {
+            text = if (it) "Yes" else "No"
+        }
+        column("Month income", Client::monthIncome).cellFormat {
+            text = if (it == -1) "" else it.toString()
+        }
+        column("Conscript", Client::conscript).cellFormat {
+            text = if (it) "Yes" else "No"
+        }
 
         columnResizePolicy = UNCONSTRAINED_RESIZE_POLICY
 

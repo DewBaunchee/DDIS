@@ -14,11 +14,11 @@ fun <T> ReadOnlyProperty<T>.observe(observer: (T) -> Unit) {
     addListener { _, _, new -> observer(new) }
 }
 
-fun <T, NextT : T> (ValidationContext.(T?) -> ValidationMessage?).and(
+fun <T, NextT : T> (ValidationContext.(T?) -> ValidationMessage?).then(
     validator: ValidationContext.(NextT?) -> ValidationMessage?
 ): ValidationContext.(NextT?) -> ValidationMessage? =
     chain@{ value ->
-        val result = this@and(value)
+        val result = this@then(value)
         if (result?.severity != ValidationSeverity.Success) return@chain result
         return@chain validator(value)
     }

@@ -20,7 +20,7 @@ class MainView : View("") {
     override val root =
         tabpane {
             tabClosingPolicy = TabPane.TabClosingPolicy.UNAVAILABLE
-            tab("Add Client") {
+            tab("Clients") {
                 add(ClientMode())
             }
             selectionModel.selectedItemProperty().observe {

@@ -6,9 +6,12 @@ import by.varyvoda.bankapp.domain.model.Sex
 import by.varyvoda.bankapp.domain.repository.impl.*
 import by.varyvoda.bankapp.ui.component.labeledField
 import by.varyvoda.bankapp.ui.mode.client.service.ClientModeService
-import by.varyvoda.bankapp.ui.util.and
+import by.varyvoda.bankapp.ui.util.ChainValidator
 import by.varyvoda.bankapp.ui.util.observe
+import by.varyvoda.bankapp.ui.util.then
 import com.mifmif.common.regex.Generex
+import javafx.animation.Interpolator
+import javafx.beans.property.SimpleObjectProperty
 import javafx.event.EventHandler
 import javafx.geometry.Pos
 import javafx.scene.control.ToggleGroup
@@ -35,9 +38,12 @@ class ClientForm : HBox() {
 
     private val randomizers = mutableListOf<() -> Unit>()
 
+    private val actionResult = SimpleObjectProperty<ValidationMessage>()
+
     init {
         clientModeService.selectedClient.observe {
             model.item = it ?: Client()
+            model.resetValidation()
         }
 
         val notNull: Validator<Any> = {
@@ -60,6 +66,7 @@ class ClientForm : HBox() {
                     ValidationMessage("", ValidationSeverity.Success)
             }
         }
+        val isOnlyText: (String) -> Boolean = { str -> str.all { it.isLetter() || it.isWhitespace() } }
 
         paddingAll = 15
 
@@ -79,13 +86,82 @@ class ClientForm : HBox() {
                     button("Save") {
                         onAction = EventHandler {
                             model.commit {
-                                if (clientRepository.get(model.item.id) != null) {
-                                    clientRepository.update(model.item)
-                                } else {
+                                val validation =
+                                    ChainValidator<Client> {
+                                        if (!model.isValid)
+                                            ValidationMessage(
+                                                "Errors in form!", ValidationSeverity.Error
+                                            )
+                                        else null
+                                    }.then {
+                                        if (clientRepository.get(it.id) != null)
+                                            ValidationMessage(
+                                                "Client with such id is already saved!", ValidationSeverity.Error
+                                            )
+                                        else null
+                                    }.then {
+                                        if (clientRepository.getByPassport(
+                                                it.passportSeries,
+                                                it.passportNumber
+                                            ) != null
+                                        ) ValidationMessage(
+                                            "Client with such passport is already saved!",
+                                            ValidationSeverity.Error
+                                        )
+                                        else null
+                                    }.validate(model.item)
+
+                                if (validation == null || validation.severity == ValidationSeverity.Success) {
                                     clientRepository.save(model.item)
+                                    clientModeService.refresh()
+                                    actionResult.value = ValidationMessage(
+                                        "Client saved", ValidationSeverity.Success
+                                    )
+                                } else {
+                                    actionResult.value = validation
                                 }
                             }
-                            clientModeService.refresh()
+                        }
+                    }
+                    button("Update") {
+                        onAction = EventHandler {
+                            model.commit {
+                                val validation =
+                                    ChainValidator<Client> {
+                                        if (!model.isValid)
+                                            ValidationMessage(
+                                                "Errors in form!", ValidationSeverity.Error
+                                            )
+                                        else null
+                                    }.then {
+                                        if (clientRepository.get(it.id) == null)
+                                            ValidationMessage(
+                                                "Client with such id is not found for update!", ValidationSeverity.Error
+                                            )
+                                        else null
+                                    }.then { client ->
+                                        if (
+                                            clientRepository.getByPassport(
+                                                client.passportSeries,
+                                                client.passportNumber
+                                            ).let { it != null && it.id != client.id }
+                                        ) ValidationMessage(
+                                            "Client with such passport is already saved!",
+                                            ValidationSeverity.Error
+                                        )
+                                        else null
+                                    }.validate(model.item)
+
+                                if (validation == null || validation.severity == ValidationSeverity.Success) {
+                                    clientRepository.update(model.item)
+                                    clientModeService.refresh()
+                                    actionResult.value = ValidationMessage(
+                                        "Client updated", ValidationSeverity.Success
+                                    )
+                                } else {
+                                    actionResult.value = validation
+                                }
+                            }
                         }
                     }
                     button("Cancel") {
@@ -111,12 +187,47 @@ class ClientForm : HBox() {
                         }
                     }
                 }
+                hbox {
+                    styled()
+                    val label = label {
+                        style {
+                            borderRadius += box(5.px)
+                            backgroundRadius += box(5.px)
+                            padding = box(5.px)
+                        }
+                    }
+                    actionResult.addListener { _, _, new ->
+                        label.text = new.message
+
+                        label.style(append = true) {
+                            val color =
+                                when (new.severity) {
+                                    ValidationSeverity.Success -> "green"
+                                    ValidationSeverity.Error -> "red"
+                                    else -> "black"
+                                }
+                            borderColor += box(c(color))
+                            backgroundColor += c(color, 0.2)
+                        }
+                        label.opacity = 1.0
+                        runLater(2.0.seconds) {
+                            sequentialTransition(true) {
+                                timeline {
+                                    keyframe(1.0.seconds) {
+                                        keyvalue(label.opacityProperty(), 0.0, Interpolator.EASE_BOTH)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             hbox {
                 styled()
                 labeledField("Last Name") {
                     textfield(model.lastName).apply {
-                        validator(ValidationTrigger.OnBlur, notNull.and(notEmpty))
+                        filterInput { isOnlyText(it.controlNewText) }
+                        validator(ValidationTrigger.OnBlur, notNull.then(notEmpty))
                         val variants = listOf("Varyvoda", "Petrov", "Smith", "Ritter", "Savitzkiy")
                         randomizers.add {
                             model.lastName.value = variants.random()
@@ -125,7 +236,8 @@ class ClientForm : HBox() {
                 }
                 labeledField("First Name") {
                     textfield(model.firstName).apply {
-                        validator(ValidationTrigger.OnBlur, notNull.and(notEmpty))
+                        filterInput { isOnlyText(it.controlNewText) }
+                        validator(ValidationTrigger.OnBlur, notNull.then(notEmpty))
                         val variants = listOf("Matvey", "Dmitriy", "John", "Scott", "Vladimir")
                         randomizers.add {
                             model.firstName.value = variants.random()
@@ -134,6 +246,7 @@ class ClientForm : HBox() {
                 }
                 labeledField("Patronymic") {
                     textfield(model.patronymic).apply {
+                        filterInput { isOnlyText(it.controlNewText) }
                         validator(ValidationTrigger.OnBlur, notNull)
                         val variants = listOf("Alekseevich", "Alexandrovich", "", "", "Nikolaevich")
                         randomizers.add {
@@ -161,14 +274,16 @@ class ClientForm : HBox() {
             hbox {
                 styled()
                 labeledField("Birthday") {
-                    datepicker(model.birthday)
+                    datepicker(model.birthday) {
+                        isEditable = false
+                    }
                     randomizers.add {
                         model.birthday.value = LocalDate.now()
                     }
                 }
                 labeledField("Birthplace") {
                     textfield(model.birthplace).apply {
-                        validator(ValidationTrigger.OnBlur, notNull.and(notEmpty))
+                        validator(ValidationTrigger.OnBlur, notNull.then(notEmpty))
                         val variants = listOf("Mars", "Earth", "Jupiter", "Uranus", "Pluto")
                         randomizers.add {
                             model.birthplace.value = variants.random()
@@ -182,7 +297,7 @@ class ClientForm : HBox() {
                     textfield(model.passportSeries).apply {
                         validator(
                             ValidationTrigger.OnBlur,
-                            notNull.and(notEmpty).and(lengthIs(2))
+                            notNull.then(notEmpty).then(lengthIs(2))
                         )
                         val variants = listOf("MC", "MR", "MW", "MK", "MG")
                         randomizers.add {
@@ -195,7 +310,7 @@ class ClientForm : HBox() {
                         filterInput { it.controlNewText.isInt() }
                         validator(
                             ValidationTrigger.OnBlur,
-                            notNull.and(notEmpty).and(lengthIs(7))
+                            notNull.then(notEmpty).then(lengthIs(7))
                         )
                         randomizers.add {
                             model.passportNumber.value = Random.nextInt(1_000_000..9_999_999).toString()
@@ -208,7 +323,7 @@ class ClientForm : HBox() {
                         val regex = Pattern.compile(regexString)
                         validator(
                             ValidationTrigger.OnChange(100),
-                            notNull.and(notEmpty).and {
+                            notNull.then(notEmpty).then {
                                 if (regex.matcher(it!!).matches())
                                     success()
                                 else
@@ -225,7 +340,7 @@ class ClientForm : HBox() {
                 styled()
                 labeledField("Produced by") {
                     textfield(model.producedBy).apply {
-                        validator(ValidationTrigger.OnBlur, notNull.and(notEmpty))
+                        validator(ValidationTrigger.OnBlur, notNull.then(notEmpty))
                         val variants = listOf("NYPD", "LAPD", "RUVD")
                         randomizers.add {
                             model.producedBy.value = variants.random()
@@ -234,6 +349,7 @@ class ClientForm : HBox() {
                 }
                 labeledField("Producing date") {
                     datepicker(model.producingDate) {
+                        isEditable = false
                         randomizers.add {
                             model.producingDate.value = LocalDate.now()
                         }
@@ -245,9 +361,9 @@ class ClientForm : HBox() {
                 labeledField("Residence City") {
                     combobox(model.residenceCity) {
                         items = observableListOf(cityRepository.getAll())
-                        validator(ValidationTrigger.OnBlur, notNull.and {
-                            if (it!!.id == 0) return@and error("Field is required")
-                            return@and success()
+                        validator(ValidationTrigger.OnBlur, notNull.then {
+                            if (it!!.id == 0) return@then error("Field is required")
+                            return@then success()
                         })
                         randomizers.add {
                             model.residenceCity.value = items.random()
@@ -258,7 +374,7 @@ class ClientForm : HBox() {
                     textfield(model.residenceAddress) {
                         validator(
                             ValidationTrigger.OnBlur,
-                            notNull.and(notEmpty)
+                            notNull.then(notEmpty)
                         )
                         val variants = listOf("Nowhere", "Anywhere", "Somewhere")
                         randomizers.add {
@@ -270,10 +386,40 @@ class ClientForm : HBox() {
             hbox {
                 styled()
                 labeledField("Home Phone Number") {
-                    textfield(model.homePhoneNumber)
+                    textfield(model.homePhoneNumber) {
+                        val regex = Regex(
+                            "^\\s*[0-9]{3}\\s*-?\\s*[0-9]{3}\\s*$"
+                        )
+                        promptText = "XXX-XXX"
+                        validator(
+                            ValidationTrigger.OnBlur,
+                        ) {
+                            if (!it.isNullOrBlank() && !regex.matches(it))
+                                ValidationMessage(
+                                    "Phone number doesn't match to pattern! $promptText",
+                                    ValidationSeverity.Error
+                                )
+                            else null
+                        }
+                    }
                 }
                 labeledField("Mobile Phone Number") {
-                    textfield(model.mobilePhoneNumber)
+                    textfield(model.mobilePhoneNumber) {
+                        val regex = Regex(
+                            "\\s*\\+375\\s*-?\\s*\\(?((2([59]))|(33)|(44))\\)?\\s*-?\\s*[0-9]{3}\\s*-?\\s*[0-9]{4}"
+                        )
+                        promptText = "+375-(XX)-XXX-XXXX"
+                        validator(
+                            ValidationTrigger.OnBlur
+                        ) {
+                            if (!it.isNullOrBlank() && !regex.matches(it))
+                                ValidationMessage(
+                                    "Phone number doesn't match to pattern! $promptText",
+                                    ValidationSeverity.Error
+                                )
+                            else null
+                        }
+                    }
                 }
                 labeledField("E-Mail") {
                     textfield(model.email)
@@ -284,7 +430,7 @@ class ClientForm : HBox() {
                 labeledField("Marital Status") {
                     combobox(model.maritalStatus) {
                         items = observableListOf(maritalStatusRepository.getAll())
-                        validator(ValidationTrigger.OnBlur, notNull.and {
+                        validator(ValidationTrigger.OnBlur, notNull.then {
                             if (it!!.id == 0) error("Field is required")
                             else success()
                         })
@@ -296,7 +442,7 @@ class ClientForm : HBox() {
                 labeledField("Citizenship") {
                     combobox(model.citizenship) {
                         items = observableListOf(countryRepository.getAll())
-                        validator(ValidationTrigger.OnBlur, notNull.and {
+                        validator(ValidationTrigger.OnBlur, notNull.then {
                             if (it!!.key == "") error("Field is required")
                             else success()
                         })
@@ -308,7 +454,7 @@ class ClientForm : HBox() {
                 labeledField("Disability") {
                     combobox(model.disability) {
                         items = observableListOf(disabilityRepository.getAll())
-                        validator(ValidationTrigger.OnBlur, notNull.and {
+                        validator(ValidationTrigger.OnBlur, notNull.then {
                             if (it!!.id == 0) error("Field is required")
                             else success()
                         })
@@ -365,4 +511,14 @@ class ClientModel(client: Client) : ItemViewModel<Client>(client) {
     val pensioner = bind(Client::pensionerProperty)
     val monthIncome = bind(Client::monthIncomeProperty)
     val conscript = bind(Client::conscriptProperty)
+
+    override fun onCommit() {
+        item.let {
+            if (homePhoneNumber.value.isNullOrBlank()) homePhoneNumber.value = null
+            if (mobilePhoneNumber.value.isNullOrBlank()) mobilePhoneNumber.value = null
+        }
+    }
+
+    fun resetValidation() {
+    }
 }
