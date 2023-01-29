@@ -43,7 +43,7 @@ class ClientForm : HBox() {
     init {
         clientModeService.selectedClient.observe {
             model.item = it ?: Client()
-            model.resetValidation()
+            model.undecorated()
         }
 
         val notNull: Validator<Any> = {
@@ -322,7 +322,7 @@ class ClientForm : HBox() {
                         val regexString = "[1-6][0-9]{6}[ABCKEMH][0-9]{3}PB[0-9]"
                         val regex = Pattern.compile(regexString)
                         validator(
-                            ValidationTrigger.OnChange(100),
+                            ValidationTrigger.OnChange(),
                             notNull.then(notEmpty).then {
                                 if (regex.matcher(it!!).matches())
                                     success()
@@ -519,6 +519,7 @@ class ClientModel(client: Client) : ItemViewModel<Client>(client) {
         }
     }
 
-    fun resetValidation() {
+    fun undecorated() {
+        validate(decorateErrors = false)
     }
 }
