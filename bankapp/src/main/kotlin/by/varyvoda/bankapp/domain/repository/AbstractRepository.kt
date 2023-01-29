@@ -3,8 +3,10 @@ package by.varyvoda.bankapp.domain.repository
 import by.varyvoda.bankapp.domain.dependency.DependencyProvider
 import by.varyvoda.bankapp.domain.repository.connection.ConnectionProvider
 import by.varyvoda.bankapp.domain.repository.mapping.EntityMapping
+import java.sql.JDBCType
 import java.sql.PreparedStatement
 import java.sql.ResultSet
+import java.time.LocalDate
 import java.util.stream.Stream
 import kotlin.streams.toList
 
@@ -12,19 +14,19 @@ abstract class AbstractRepository<Id, E>(private val entityMapping: EntityMappin
 
     private val connection = DependencyProvider.get().provide(ConnectionProvider::class.java).getConnection()
 
-    private val columnsString =
+    private val nonGeneratedColumns =
         entityMapping
-            .nonIdFields
+            .nonGeneratedFields
             .joinToString(",") { it.columnName }
 
-    private val columnsStringWithId =
+    private val allColumns =
         entityMapping
             .fields
             .joinToString(",") { it.columnName }
 
     private val valuesString =
         entityMapping
-            .fields
+            .nonGeneratedFields
             .joinToString(",", "(", ")") { "?" }
 
     private val whereId = "WHERE ${entityMapping.idField.columnName} = ?"
@@ -32,7 +34,7 @@ abstract class AbstractRepository<Id, E>(private val entityMapping: EntityMappin
     private val tableName = entityMapping.tableName
 
     // Templates
-    private val insertTemplate = "INSERT INTO $tableName ($columnsString) VALUES $valuesString"
+    private val insertTemplate = "INSERT INTO $tableName ($nonGeneratedColumns) VALUES $valuesString"
 
     private val updateTemplate = "UPDATE $tableName SET ${
         entityMapping
@@ -40,9 +42,9 @@ abstract class AbstractRepository<Id, E>(private val entityMapping: EntityMappin
             .joinToString(", ") { "${it.columnName} = ?" }
     } $whereId"
 
-    private val selectTemplate = "SELECT $columnsStringWithId FROM $tableName $whereId"
+    private val selectTemplate = "SELECT $allColumns FROM $tableName $whereId"
 
-    private val selectAllTemplate = "SELECT $columnsStringWithId FROM $tableName"
+    private val selectAllTemplate = "SELECT $allColumns FROM $tableName"
 
     private val deleteTemplate = "DELETE FROM $tableName $whereId"
 
@@ -52,18 +54,61 @@ abstract class AbstractRepository<Id, E>(private val entityMapping: EntityMappin
         query.execute()
     }
 
-    private val plainSetters = mapOf<Class<out Any>, (PreparedStatement, Int, Any?) -> Unit>(
-        Float::class.java to { query, position, value -> query.setFloat(position, value as Float) },
-        Double::class.java to { query, position, value -> query.setDouble(position, value as Double) },
-        Int::class.java to { query, position, value -> query.setInt(position, value as Int) },
-        Long::class.java to { query, position, value -> query.setLong(position, value as Long) },
-        String::class.java to { query, position, value -> query.setString(position, value as String) },
-    )
+    private val accessors = MapAccessors<E>()
+        .add(
+            Float::class.java,
+            { query, position, value -> query.setFloat(position, value) },
+            { result, columnLabel -> result.getFloat(columnLabel) },
+            JDBCType.FLOAT
+        )
+        .add(
+            Double::class.java,
+            { query, position, value -> query.setDouble(position, value) },
+            { result, columnLabel -> result.getDouble(columnLabel) },
+            JDBCType.DOUBLE
+        )
+        .add(
+            Int::class.java,
+            { query, position, value -> query.setInt(position, value) },
+            { result, columnLabel -> result.getInt(columnLabel) },
+            JDBCType.INTEGER
+        )
+        .add(
+            String::class.java,
+            { query, position, value -> query.setString(position, value) },
+            { result, columnLabel -> result.getString(columnLabel) },
+            JDBCType.VARCHAR
+        )
+        .add(
+            Boolean::class.java,
+            { query, position, value -> query.setBoolean(position, value) },
+            { result, columnLabel -> result.getBoolean(columnLabel) },
+            JDBCType.BOOLEAN
+        )
+        .add(
+            LocalDate::class.java,
+            { query, position, value -> query.setObject(position, value) },
+            { result, columnLabel -> result.getObject(columnLabel, LocalDate::class.java) },
+            JDBCType.DATE
+        )
 
     private fun prepare(query: PreparedStatement, entity: E) {
-        entityMapping.nonIdFields.forEachIndexed { index, fieldDescription ->
-            set(query, entity, index + 1, fieldDescription)
+        entityMapping.nonGeneratedFields.forEachIndexed { index, field ->
+            set(query, entity, index + 1, field)
         }
+    }
+
+    private fun <T> setValue(
+        query: PreparedStatement,
+        value: T,
+        position: Int,
+        field: EntityMapping.Field<E, out Any>
+    ) {
+        if (value == null) {
+            query.setNull(position, accessors.jdbcType(field).vendorTypeNumber)
+            return
+        }
+        accessors.setter(field as EntityMapping.Field<E, T>)(query, position, value)
     }
 
     private fun set(
@@ -72,22 +117,24 @@ abstract class AbstractRepository<Id, E>(private val entityMapping: EntityMappin
         position: Int,
         field: EntityMapping.Field<E, out Any>
     ) {
-        plainSetters[field.plainType]!!(query, position, field.getter(entity))
+        setValue(query, field.getter(entity), position, field)
     }
 
     override fun update(entity: E) {
         val query = connection.prepareStatement(updateTemplate)
         prepare(query, entity)
-        plainSetters[entityMapping.idField.plainType]!!(
+        setValue(
             query,
+            entityMapping.idField.getter(entity),
             entityMapping.fields.size + 1,
-            entityMapping.idField.getter(entity)
+            entityMapping.idField
         )
         query.execute()
     }
 
     override fun get(id: Id): E? {
         val query = connection.prepareStatement(selectTemplate)
+        setValue(query, id, 1, entityMapping.idField)
 
         val result = query.executeQuery()
         if (!result.next()) return null
@@ -95,7 +142,7 @@ abstract class AbstractRepository<Id, E>(private val entityMapping: EntityMappin
         return parse(result)
     }
 
-    override fun getAll(id: Id): List<E> {
+    override fun getAll(): List<E> {
         val query = connection.prepareStatement(selectAllTemplate)
         val result = query.executeQuery()
         return Stream.generate { }
@@ -103,14 +150,6 @@ abstract class AbstractRepository<Id, E>(private val entityMapping: EntityMappin
             .map { parse(result) }
             .toList()
     }
-
-    private val plainGetters = mapOf<Class<out Any>, (ResultSet, String) -> Any?>(
-        Float::class.java to { result, columnLabel -> result.getFloat(columnLabel) },
-        Double::class.java to { result, columnLabel -> result.getFloat(columnLabel) },
-        Int::class.java to { result, columnLabel -> result.getFloat(columnLabel) },
-        Long::class.java to { result, columnLabel -> result.getFloat(columnLabel) },
-        String::class.java to { result, columnLabel -> result.getFloat(columnLabel) },
-    )
 
     private fun parse(resultSet: ResultSet): E {
         val entity = entityMapping.creator()
@@ -127,13 +166,47 @@ abstract class AbstractRepository<Id, E>(private val entityMapping: EntityMappin
     private fun <FT> set(field: EntityMapping.Field<E, FT>, entity: E, resultSet: ResultSet) {
         field.setter(
             entity,
-            plainGetters[field.plainType]!!(resultSet, field.columnName) as FT
+            accessors.getter(field)(resultSet, field.columnName)
         )
     }
 
     override fun delete(id: Id) {
         val query = connection.prepareStatement(deleteTemplate)
-        plainSetters[entityMapping.idField.plainType]!!(query, 1, id!!)
+        setValue(query, id!!, 1, entityMapping.idField)
         query.execute()
     }
+
+    private class MapAccessors<E> {
+
+        private val map = mutableMapOf<Any, Accessors<out Any>>()
+
+        fun <T : Any> add(
+            aClass: Class<T>,
+            setter: (PreparedStatement, Int, T) -> Unit,
+            getter: (ResultSet, String) -> T?,
+            jdbcType: JDBCType
+        ): MapAccessors<E> {
+            map[aClass] = Accessors(setter, getter, jdbcType)
+            return this
+        }
+
+        fun <FT> setter(field: EntityMapping.Field<E, FT>): (PreparedStatement, Int, FT?) -> Unit {
+            return map[field.plainType]!!.setter as (PreparedStatement, Int, FT?) -> Unit
+        }
+
+        fun <FT> getter(field: EntityMapping.Field<E, FT>): (ResultSet, String) -> FT? {
+            return map[field.plainType]!!.getter as (ResultSet, String) -> FT?
+        }
+
+        fun <FT> jdbcType(field: EntityMapping.Field<E, FT>): JDBCType {
+            return map[field.plainType]!!.jdbcType
+        }
+
+        class Accessors<T>(
+            val setter: (PreparedStatement, Int, T) -> Unit,
+            val getter: (ResultSet, String) -> T?,
+            val jdbcType: JDBCType
+        )
+    }
 }
+

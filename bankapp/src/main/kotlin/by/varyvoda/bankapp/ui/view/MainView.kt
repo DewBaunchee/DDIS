@@ -1,29 +1,30 @@
 package by.varyvoda.bankapp.ui.view
 
-import by.varyvoda.bankapp.ui.mode.AddClientMode
-import by.varyvoda.bankapp.ui.mode.Mode
+import by.varyvoda.bankapp.ui.mode.client.ClientMode
 import by.varyvoda.bankapp.ui.util.observe
-import javafx.beans.property.SimpleObjectProperty
-import javafx.scene.Node
+import javafx.beans.property.SimpleStringProperty
+import javafx.scene.control.TabPane
 import tornadofx.*
 
 class MainView : View("") {
 
-    private val selectedWindow: SimpleObjectProperty<Mode> = SimpleObjectProperty(AddClientMode())
+    private val selectedTab = SimpleStringProperty("")
 
     override fun onDock() {
         super.onDock()
         primaryStage.isMaximized = true
         primaryStage.titleProperty().unbind()
-        selectedWindow.observe { primaryStage.title = it.name }
+        selectedTab.observe { primaryStage.title = it }
     }
 
-    override val root = hbox {
-        vbox {
-            button("Add Client") { selectedWindow.value = AddClientMode() }
+    override val root =
+        tabpane {
+            tabClosingPolicy = TabPane.TabClosingPolicy.UNAVAILABLE
+            tab("Add Client") {
+                add(ClientMode())
+            }
+            selectionModel.selectedItemProperty().observe {
+                selectedTab.value = it.text
+            }
         }
-        stackpane {
-            selectedWindow.observe { children.setAll(it as Node) }
-        }
-    }
 }

@@ -8,7 +8,7 @@ interface Repository<Id, E> {
 
     fun get(id: Id): E?
 
-    fun getAll(id: Id): List<E>
+    fun getAll(): List<E>
 
     fun delete(id: Id)
 }

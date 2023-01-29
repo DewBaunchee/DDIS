@@ -6,6 +6,8 @@ module TFXSAMPLE {
     requires kotlin.stdlib;
     requires java.sql;
     requires kotlin.stdlib.jdk8;
+    requires kotlin.reflect;
+    requires generex;
     exports by.varyvoda.bankapp to javafx.graphics, tornadofx;
     exports by.varyvoda.bankapp.ui.view to tornadofx;
 }
