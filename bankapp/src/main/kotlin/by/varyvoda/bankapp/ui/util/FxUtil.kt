@@ -4,6 +4,8 @@ import javafx.beans.property.ReadOnlyObjectProperty
 import javafx.beans.property.ReadOnlyProperty
 import tornadofx.*
 
+typealias FxValidator<T> = ValidationContext.(T?) -> ValidationMessage?
+
 fun <T> ReadOnlyObjectProperty<T>.observe(observer: (T) -> Unit) {
     observer(value)
     addListener { _, _, new -> observer(new) }

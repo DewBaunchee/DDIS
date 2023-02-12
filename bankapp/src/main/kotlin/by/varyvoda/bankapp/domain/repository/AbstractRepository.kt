@@ -1,6 +1,6 @@
 package by.varyvoda.bankapp.domain.repository
 
-import by.varyvoda.bankapp.domain.dependency.DependencyProvider
+import by.varyvoda.bankapp.domain.dependency.provide
 import by.varyvoda.bankapp.domain.repository.connection.ConnectionProvider
 import by.varyvoda.bankapp.domain.repository.mapping.EntityMapping
 import java.sql.JDBCType
@@ -12,7 +12,7 @@ import kotlin.streams.toList
 
 abstract class AbstractRepository<Id, E>(protected val entityMapping: EntityMapping<E>) : Repository<Id, E> {
 
-    private val connection = DependencyProvider.get().provide(ConnectionProvider::class.java).getConnection()
+    private val connection = provide(ConnectionProvider::class.java).getConnection()
 
     private val nonGeneratedColumns =
         entityMapping

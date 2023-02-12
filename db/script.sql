@@ -87,3 +87,53 @@ VALUES ('None'),
        ('I Group'),
        ('II Group'),
        ('III Group');
+
+
+CREATE TABLE deposit_program
+(
+    id                     SERIAL PRIMARY KEY,
+    name                   VARCHAR NOT NULL,
+    revocable              BOOLEAN NOT NULL,
+    period                 VARCHAR NOT NULL,
+    first_payment          INT     NOT NULL,
+    percent_strategy       VARCHAR NOT NULL,
+    replenishment          VARCHAR NOT NULL,
+    expenditure_operations VARCHAR NOT NULL,
+    auto_prolongation      BOOLEAN NOT NULL
+);
+
+CREATE TABLE currency
+(
+    key VARCHAR PRIMARY KEY
+);
+
+CREATE TABLE deposit
+(
+    id       SERIAL PRIMARY KEY,
+    type     INTEGER NOT NULL,
+    begin    DATE    NOT NULL,
+    "end"    DATE    NOT NULL,
+    amount   INTEGER NOT NULL,
+    currency VARCHAR NOT NULL,
+    client   VARCHAR NOT NULL,
+
+    FOREIGN KEY (type) REFERENCES deposit_program (id),
+    FOREIGN KEY (currency) REFERENCES currency (key),
+    FOREIGN KEY (client) REFERENCES client (id)
+);
+
+CREATE TABLE account
+(
+    number   CHAR(13) NOT NULL,
+    code     CHAR(4)  NOT NULL,
+    active   BOOLEAN  NOT NULL,
+    passive  BOOLEAN  NOT NULL,
+    debit    INTEGER  NOT NULL,
+    credit   INTEGER  NOT NULL,
+    balance  INTEGER  NOT NULL,
+    currency VARCHAR  NOT NULL,
+    client   VARCHAR  NOT NULL,
+
+    FOREIGN KEY (currency) REFERENCES currency (key),
+    FOREIGN KEY (client) REFERENCES client (id)
+);

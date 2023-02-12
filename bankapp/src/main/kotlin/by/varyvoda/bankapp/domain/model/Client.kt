@@ -8,6 +8,8 @@ import tornadofx.*
 import java.time.LocalDate
 
 class Client {
+    val fullName get() = "$lastName $firstName $patronymic"
+
     val lastNameProperty = SimpleStringProperty(this, "lastName", "")
     var lastName: String by lastNameProperty
 
@@ -73,4 +75,8 @@ class Client {
 
     val conscriptProperty = SimpleBooleanProperty(this, "conscript", true)
     var conscript: Boolean by conscriptProperty
+
+    override fun toString(): String {
+        return id
+    }
 }

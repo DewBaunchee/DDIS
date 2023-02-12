@@ -1,6 +1,6 @@
 package by.varyvoda.bankapp.ui.mode.client.component
 
-import by.varyvoda.bankapp.domain.dependency.DependencyProvider
+import by.varyvoda.bankapp.domain.dependency.provide
 import by.varyvoda.bankapp.domain.model.Client
 import by.varyvoda.bankapp.ui.mode.client.service.ClientModeService
 import javafx.scene.control.TableView
@@ -8,7 +8,7 @@ import tornadofx.*
 
 class ClientTable : TableView<Client>() {
 
-    private val clientModeService = DependencyProvider.get().provide(ClientModeService::class.java)
+    private val clientModeService = provide(ClientModeService::class.java)
 
     init {
         column("Last Name", Client::lastName)
@@ -42,7 +42,7 @@ class ClientTable : TableView<Client>() {
 
         columnResizePolicy = UNCONSTRAINED_RESIZE_POLICY
 
-        items = clientModeService.items
+        items = clientModeService.clients
         clientModeService.selectedClient.bind(selectionModel.selectedItemProperty())
         clientModeService.refresh()
     }

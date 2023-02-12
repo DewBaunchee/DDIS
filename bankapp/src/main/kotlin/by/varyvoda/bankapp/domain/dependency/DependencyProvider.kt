@@ -16,8 +16,12 @@ class DependencyProvider private constructor() {
         map[name] = instance
     }
 
-    fun <T>register(aClass: Class<T>, instance: Any) {
+    fun <T> register(aClass: Class<T>, instance: Any) {
         register(classToName(aClass), instance)
+    }
+
+    fun register(instance: Any) {
+        register(instance.javaClass, instance)
     }
 
     fun provide(name: String): Any {
@@ -34,3 +38,5 @@ class DependencyProvider private constructor() {
         return aClass.name
     }
 }
+
+fun <T> provide(aClass: Class<T>): T = DependencyProvider.get().provide(aClass)
