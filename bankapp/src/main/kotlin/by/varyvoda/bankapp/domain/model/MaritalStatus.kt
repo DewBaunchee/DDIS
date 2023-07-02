@@ -1,7 +1,16 @@
 package by.varyvoda.bankapp.domain.model
 
+import javax.persistence.Column
+import javax.persistence.GeneratedValue
+import javax.persistence.Id
+
 class MaritalStatus {
+    @Id
+    @GeneratedValue
+    @Column(name = "id")
     var id: Int = 0
+
+    @Column(name = "name")
     var name: String = ""
 
     override fun equals(other: Any?): Boolean {

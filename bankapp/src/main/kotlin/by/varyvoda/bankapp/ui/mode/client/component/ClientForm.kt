@@ -29,7 +29,7 @@ class ClientForm : VBox() {
 
     private val model = ClientModel(Client())
 
-    private val clientRepository = provide(ClientRepository::class.java)
+    private val clientRepository by di()
     private val cityRepository = provide(CityRepository::class.java)
     private val maritalStatusRepository = provide(MaritalStatusRepository::class.java)
     private val countryRepository = provide(CountryRepository::class.java)
@@ -101,7 +101,7 @@ class ClientForm : VBox() {
                                         )
                                     else null
                                 }.then {
-                                    if (clientRepository.getByPassport(
+                                    if (clientRepository.getByPassportSeriesAndPassportNumber(
                                             it.passportSeries,
                                             it.passportNumber
                                         ) != null
@@ -142,7 +142,7 @@ class ClientForm : VBox() {
                                     else null
                                 }.then { client ->
                                     if (
-                                        clientRepository.getByPassport(
+                                        clientRepository.getByPassportSeriesAndPassportNumber(
                                             client.passportSeries,
                                             client.passportNumber
                                         ).let { it != null && it.id != client.id }
@@ -369,7 +369,7 @@ class ClientForm : VBox() {
             styled()
             labeledField("Residence City") {
                 combobox(model.residenceCity) {
-                    items = observableListOf(cityRepository.getAll())
+                    items = observableListOf(cityRepository.findAll())
                     validator(ValidationTrigger.OnBlur, notNull.then {
                         if (it!!.id == 0) return@then error("Field is required")
                         return@then success()
@@ -438,7 +438,7 @@ class ClientForm : VBox() {
             styled()
             labeledField("Marital Status") {
                 combobox(model.maritalStatus) {
-                    items = observableListOf(maritalStatusRepository.getAll())
+                    items = observableListOf(maritalStatusRepository.findAll())
                     validator(ValidationTrigger.OnBlur, notNull.then {
                         if (it!!.id == 0) error("Field is required")
                         else success()
@@ -450,7 +450,7 @@ class ClientForm : VBox() {
             }
             labeledField("Citizenship") {
                 combobox(model.citizenship) {
-                    items = observableListOf(countryRepository.getAll())
+                    items = observableListOf(countryRepository.findAll())
                     validator(ValidationTrigger.OnBlur, notNull.then {
                         if (it!!.key == "") error("Field is required")
                         else success()
@@ -462,7 +462,7 @@ class ClientForm : VBox() {
             }
             labeledField("Disability") {
                 combobox(model.disability) {
-                    items = observableListOf(disabilityRepository.getAll())
+                    items = observableListOf(disabilityRepository.findAll())
                     validator(ValidationTrigger.OnBlur, notNull.then {
                         if (it!!.id == 0) error("Field is required")
                         else success()
@@ -497,7 +497,7 @@ class ClientForm : VBox() {
 }
 
 class ClientModel(client: Client) : ItemViewModel<Client>(client) {
-    val lastName = bind(Client::lastNameProperty)
+    val lastName = bind(Client::lastName)
     val firstName = bind(Client::firstNameProperty)
     val patronymic = bind(Client::patronymicProperty)
     val birthday = bind(Client::birthdayProperty)

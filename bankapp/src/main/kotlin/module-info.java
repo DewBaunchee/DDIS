@@ -13,6 +13,11 @@ module TFXSAMPLE {
     requires spring.context;
     requires spring.boot;
     requires spring.beans;
+    requires spring.data.jpa;
+    requires spring.orm;
+    requires spring.tx;
+    requires spring.jdbc;
+    requires java.persistence;
     exports by.varyvoda.bankapp to javafx.graphics, tornadofx;
     exports by.varyvoda.bankapp.ui.view to tornadofx;
 }
